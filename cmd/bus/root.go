@@ -2,12 +2,13 @@ package bus
 
 import (
 	"github.com/aka-somix/aws-events-gate/cmd/bus/monitor"
+	"github.com/aka-somix/aws-events-gate/internal/services"
 	"github.com/spf13/cobra"
 )
 
-type EventBus struct {
-	Name string `json:"Name"`
-}
+// Global Monitor Service init
+var ebService = services.NewEventBusService()
+
 
 // busCmd represents the "bus" subcommand
 var Cmd = &cobra.Command{

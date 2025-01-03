@@ -1,9 +1,7 @@
 package bus
 
 import (
-	"encoding/json"
 	"fmt"
-	"os/exec"
 
 	"github.com/spf13/cobra"
 )
@@ -14,30 +12,18 @@ var listCmd = &cobra.Command{
 	Short: "Lists AWS EventBridge event buses",
 	Long:  `This command is used to list the AWS EventBridge event buses.`,
 	Run: func(cmd *cobra.Command, args []string) {
-		// Run the AWS CLI command to list event buses
-		out, err := exec.Command("aws", "events", "list-event-buses", "--output", "json").Output()
+		// Retrieve Event Buses
+		eventBuses, err := ebService.List()
+		
 		if err != nil {
-			fmt.Printf("Error: %v\n", err)
+			// TODO scirone: manage errors
 			return
 		}
 
-		// Parse the JSON output
-		var result struct {
-			EventBuses []EventBus `json:"EventBuses"`
-		}
-		if err := json.Unmarshal(out, &result); err != nil {
-			fmt.Printf("Error parsing AWS CLI output: %v\n", err)
-			return
-		}
-
-		// Display the event buses
-		if len(result.EventBuses) == 0 {
-			fmt.Println("No EventBridge event buses found.")
-			return
-		}
+		// TODO scirone: beautify
 
 		fmt.Println("Available EventBridge event buses:")
-		for _, bus := range result.EventBuses {
+		for _, bus := range eventBuses {
 			fmt.Printf(" - %s\n", bus.Name)
 		}
 	},
