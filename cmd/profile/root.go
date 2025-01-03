@@ -9,12 +9,12 @@ import (
 var profileStore = store.NewProfileStore()
 
 // profilesCmd represents the "profiles" subcommand
-var profilesCmd = &cobra.Command{
+var Cmd = &cobra.Command{
 	Use:   "profile",
 	Short: "Manage the active AWS CLI profile",
 	Long:  `This command allows you to set, view, or clear the active AWS CLI profile.`,
 }
 
 func init() {
-	profilesCmd.AddCommand(setProfileCmd)
+	Cmd.AddCommand(setProfileCmd)
 }

@@ -1,6 +1,7 @@
 package bus
 
 import (
+	"github.com/aka-somix/aws-events-gate/cmd/bus/monitor"
 	"github.com/spf13/cobra"
 )
 
@@ -9,12 +10,12 @@ type EventBus struct {
 }
 
 // busCmd represents the "bus" subcommand
-var busCmd = &cobra.Command{
+var Cmd = &cobra.Command{
 	Use:   "bus",
 	Short: "Manages AWS EventBridge event buses",
 	Long:  `This command is used to manage the AWS EventBridge event buses.`,
 }
 
 func init() {
-	busCmd.AddCommand(listCmd)
+	Cmd.AddCommand(listCmd, monitor.Cmd)
 }
