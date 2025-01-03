@@ -1,16 +1,11 @@
 package services
 
-import "github.com/aka-somix/aws-events-gate/internal/store"
-
 
 type MonitorService struct {
-	profileStore *store.ProfileStore
 }
 
-func NewMonitorService(profileStore *store.ProfileStore) *MonitorService {
-	return &MonitorService{
-		profileStore,
-	}
+func NewMonitorService() *MonitorService {
+	return &MonitorService{}
 }
 
 func (ms *MonitorService) Create(eventBus string) string{

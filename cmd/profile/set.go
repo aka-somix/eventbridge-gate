@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"strings"
 
+	"github.com/aka-somix/aws-events-gate/internal/store"
 	"github.com/manifoldco/promptui"
 	"github.com/spf13/cobra"
 )
@@ -43,7 +44,7 @@ var setProfileCmd = &cobra.Command{
 		}
 
 		// Set the selected profile as the active profile
-		profileStore.SetActiveProfile(selectedProfile)
+		store.GetProfileStore().SetActiveProfile(selectedProfile)
 		fmt.Printf("Active profile set to '%s'\n", selectedProfile)
 	},
 }

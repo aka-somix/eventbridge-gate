@@ -1,12 +1,8 @@
 package profile
 
 import (
-	"github.com/aka-somix/aws-events-gate/internal/store"
 	"github.com/spf13/cobra"
 )
-
-// Global profile store instance
-var profileStore = store.NewProfileStore()
 
 // profilesCmd represents the "profiles" subcommand
 var Cmd = &cobra.Command{
