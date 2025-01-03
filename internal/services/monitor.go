@@ -12,7 +12,7 @@ func (ms *MonitorService) Create(eventBus string) string{
 	return "abcd"
 }
 
-func (ms *MonitorService) List(eventBus string) []string {
+func (ms *MonitorService) List() []string {
 	return []string{"abcd"}
 }
 

@@ -13,7 +13,11 @@ var unsetCmd = &cobra.Command{
 	Long:  `This command will destroy the resources necessary to monitor the Eventbridge Bus.`,
 	Args:  cobra.ExactArgs(1), // Ensures exactly one argument is passed
 	Run: func(cmd *cobra.Command, args []string) {
+		// Extract bus name from args
 		busName := args[0]
+		// Create the monitor
+		monitorService.Destroy(busName)
+		// TODO scirone: beautify
 		fmt.Printf("Monitor unset for bus provided: %s\n", busName)
 	},
 }
