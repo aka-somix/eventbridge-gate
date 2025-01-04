@@ -1,7 +1,6 @@
 package aws
 
 import (
-	"fmt"
 	"os/exec"
 
 	"github.com/aka-somix/aws-events-gate/internal/store"
@@ -16,10 +15,10 @@ func AwsCommand(name string, arg ...string) *exec.Cmd {
 
 	// Add --profile if profile is not nil
 	if profile != "" {
-		fmt.Printf("Executing request with profile: %v\n", profile)
+		// fmt.Printf("Executing request with profile: %v\n", profile)
 		cmdArgs = append(cmdArgs, "--profile", profile)
 	} else {
-		fmt.Println("Executing request with DEFAULT profile")
+		// fmt.Println("Executing request with DEFAULT profile")
 	}
 	// Execute command
 	return exec.Command(name, cmdArgs...)
