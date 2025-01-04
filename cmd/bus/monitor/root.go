@@ -6,7 +6,7 @@ import (
 )
 
 // Global Monitor Service init
-var monitorService = services.NewMonitorService()
+var monitorService, _ = services.NewMonitorService()
 
 // busCmd represents the "bus" subcommand
 var Cmd = &cobra.Command{

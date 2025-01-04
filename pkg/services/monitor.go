@@ -1,45 +1,66 @@
 package services
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
-	"strconv"
 
-	"github.com/aka-somix/aws-events-gate/internal/aws"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs"
+	"github.com/aws/aws-sdk-go-v2/service/eventbridge"
+	"github.com/aws/aws-sdk-go-v2/service/eventbridge/types"
 )
 
-// Global Config for Monitor creations
-var cfg *MonitorConfig = &MonitorConfig{
-	logGroupPrefix: "/aws-events-gate/watch",
-	retentionDays: "1",
-	policyName: "allow-logging-from-eventbridge",
-	targetID: "aws-events-gate-log-group",
-	ruleName: "aws-events-gate-rule",
-	eventPattern: `{"source": [ { "wildcard": "*" }]}`,
+
+var cfg = &MonitorConfig{
+	LogGroupPrefix: "/aws-events-gate/watch",
+	RetentionDays:  1,
+	PolicyName:     "allow-logging-from-eventbridge",
+	TargetID:       "aws-events-gate-log-group",
+	RuleName:       "aws-events-gate-rule",
+	EventPattern:   `{"source": [ { "wildcard": "*" }]}`,
 }
 
 type MonitorService struct {
+	cwLogsClient *cloudwatchlogs.Client
+	ebClient     *eventbridge.Client
 }
 
-func NewMonitorService() *MonitorService {
-	return &MonitorService{}
+func NewMonitorService() (*MonitorService, error) {
+	awsCfg, err := config.LoadDefaultConfig(context.TODO())
+	if err != nil {
+		return nil, fmt.Errorf("failed to load AWS config: %w", err)
+	}
+
+	return &MonitorService{
+		cwLogsClient: cloudwatchlogs.NewFromConfig(awsCfg),
+		ebClient:     eventbridge.NewFromConfig(awsCfg),
+	}, nil
 }
 
-
-func (ms *MonitorService) Create(eventBus string) error{
+func (ms *MonitorService) Create(eventBus string) error {
 	fmt.Printf("Starting resource creation for EventBus: %s\n", eventBus)
 
-	// Create CloudWatch Log Group
-	logGroupName := fmt.Sprintf("%s/%s", cfg.logGroupPrefix, eventBus)
+	ctx := context.TODO()
+	logGroupName := fmt.Sprintf("%s/%s", cfg.LogGroupPrefix, eventBus)
 
-	if _, err := aws.AwsCommand("aws", "logs", "create-log-group", "--log-group-name", logGroupName).Output(); err != nil {
+	// Create CloudWatch Log Group
+	_, err := ms.cwLogsClient.CreateLogGroup(ctx, &cloudwatchlogs.CreateLogGroupInput{
+		LogGroupName: aws.String(logGroupName),
+	})
+	if err != nil {
 		fmt.Printf("Log Group already exists or error occurred: %v\n", err)
 	} else {
 		fmt.Printf("Log Group %s created successfully\n", logGroupName)
 	}
 
-	// Put retention policy
-	if _, err := aws.AwsCommand("aws", "logs", "put-retention-policy", "--log-group-name", logGroupName, "--retention-in-days", cfg.retentionDays).Output(); err != nil {
+	// Set retention policy
+	_, err = ms.cwLogsClient.PutRetentionPolicy(ctx, &cloudwatchlogs.PutRetentionPolicyInput{
+		LogGroupName:    aws.String(logGroupName),
+		RetentionInDays: &cfg.RetentionDays,
+	})
+	if err != nil {
 		fmt.Printf("Retention policy already set or error occurred: %v\n", err)
 	} else {
 		fmt.Printf("Retention policy set for Log Group %s\n", logGroupName)
@@ -58,56 +79,90 @@ func (ms *MonitorService) Create(eventBus string) error{
 		},
 	}
 	policyJSON, _ := json.Marshal(policyDocument)
-    policyJSONStr := strconv.Quote(string(policyJSON)) // Escape quotes
-	if err := aws.AwsCommand("aws", "logs", "put-resource-policy", "--policy-name", cfg.policyName, "--policy-document", policyJSONStr); err != nil {
+	_, err = ms.cwLogsClient.PutResourcePolicy(ctx, &cloudwatchlogs.PutResourcePolicyInput{
+		PolicyName:     aws.String(cfg.PolicyName),
+		PolicyDocument: aws.String(string(policyJSON)),
+	})
+	if err != nil {
 		fmt.Printf("Log Resource Policy already exists or error occurred: %v\n", err)
 	} else {
-		fmt.Printf("Log Resource Policy %s created successfully\n", cfg.policyName)
+		fmt.Printf("Log Resource Policy %s created successfully\n", cfg.PolicyName)
 	}
 
-	// Create EventBridge Rul
-    eventPatternStr := strconv.Quote(cfg.eventPattern) // Escape quotes for the event pattern
-	if err := aws.AwsCommand("aws", "events", "put-rule", "--name", cfg.ruleName, "--event-bus-name", eventBus, "--event-pattern", eventPatternStr); err != nil {
+	// Retrieve Created Log Group
+	descOutput, descErr := ms.cwLogsClient.DescribeLogGroups(ctx, &cloudwatchlogs.DescribeLogGroupsInput{
+		LogGroupNamePrefix: aws.String(logGroupName),
+	})
+	if descErr != nil || len(descOutput.LogGroups) == 0 {
+		return error(fmt.Errorf("Failed to Create Monitor: %w", descErr))
+	}
+	var logGroupArn = aws.ToString(descOutput.LogGroups[0].Arn)
+
+	// Create EventBridge Rule
+	_, err = ms.ebClient.PutRule(ctx, &eventbridge.PutRuleInput{
+		Name:         aws.String(cfg.RuleName),
+		EventBusName: aws.String(eventBus),
+		EventPattern: aws.String(cfg.EventPattern),
+	})
+	if err != nil {
 		fmt.Printf("EventBridge Rule already exists or error occurred: %v\n", err)
 	} else {
-		fmt.Printf("EventBridge Rule %s created successfully\n", cfg.ruleName)
+		fmt.Printf("EventBridge Rule %s created successfully\n", cfg.RuleName)
 	}
 
 	// Add Target to EventBridge Rule
-	targetsStr := strconv.Quote(fmt.Sprintf(`[{"Id": "%s", "Arn": "arn:aws:logs:*:*:log-group:%s"}]`, cfg.targetID, logGroupName))
-	if err := aws.AwsCommand("aws", "events", "put-targets", "--rule", cfg.ruleName, "--event-bus-name", eventBus, "--targets", targetsStr); err != nil {
+	target := types.Target{
+		Id:  aws.String(cfg.TargetID),
+		Arn: aws.String(logGroupArn),
+	}
+	_, err = ms.ebClient.PutTargets(ctx, &eventbridge.PutTargetsInput{
+		Rule:         aws.String(cfg.RuleName),
+		EventBusName: aws.String(eventBus),
+		Targets:      []types.Target{target},
+	})
+	if err != nil {
 		fmt.Printf("Target already exists or error occurred: %v\n", err)
 	} else {
-		fmt.Printf("Target added to Rule %s successfully\n", cfg.targetID)
+		fmt.Printf("Target added to Rule %s successfully\n", cfg.TargetID)
 	}
 
 	return nil
 }
 
-func (ms *MonitorService) List() []string {
-	return []string{"abcd"}
-}
-
-func (ms *MonitorService) Destroy(eventBus string) error{
+func (ms *MonitorService) Destroy(eventBus string) error {
 	fmt.Printf("Starting resource deletion for EventBus: %s\n", eventBus)
 
-	// Delete Target from EventBridge Rule
-	if _, err := aws.AwsCommand("aws", "events", "remove-targets", "--rule", cfg.ruleName, "--event-bus-name", eventBus, "--ids", "CloudWatchLogs").Output(); err != nil {
+	ctx := context.TODO()
+	logGroupName := fmt.Sprintf("%s/%s", cfg.LogGroupPrefix, eventBus)
+
+	// Remove Target from EventBridge Rule
+	_, err := ms.ebClient.RemoveTargets(ctx, &eventbridge.RemoveTargetsInput{
+		Rule:         aws.String(cfg.RuleName),
+		EventBusName: aws.String(eventBus),
+		Ids:          []string{cfg.TargetID},
+	})
+	if err != nil {
 		fmt.Printf("Target already removed or error occurred: %v\n", err)
 	} else {
-		fmt.Printf("Target removed from Rule %s successfully\n", cfg.ruleName)
+		fmt.Printf("Target removed from Rule %s successfully\n", cfg.RuleName)
 	}
 
 	// Delete EventBridge Rule
-	if _, err := aws.AwsCommand("aws", "events", "delete-rule", "--name", cfg.ruleName, "--event-bus-name", eventBus).Output(); err != nil {
+	_, err = ms.ebClient.DeleteRule(ctx, &eventbridge.DeleteRuleInput{
+		Name:         aws.String(cfg.RuleName),
+		EventBusName: aws.String(eventBus),
+	})
+	if err != nil {
 		fmt.Printf("Rule already deleted or error occurred: %v\n", err)
 	} else {
-		fmt.Printf("EventBridge Rule %s deleted successfully\n", cfg.ruleName)
+		fmt.Printf("EventBridge Rule %s deleted successfully\n", cfg.RuleName)
 	}
 
 	// Delete CloudWatch Log Group
-	logGroupName := fmt.Sprintf("%s/%s", cfg.logGroupPrefix, eventBus)
-	if _, err := aws.AwsCommand("aws", "logs", "delete-log-group", "--log-group-name", logGroupName).Output(); err != nil {
+	_, err = ms.cwLogsClient.DeleteLogGroup(ctx, &cloudwatchlogs.DeleteLogGroupInput{
+		LogGroupName: aws.String(logGroupName),
+	})
+	if err != nil {
 		fmt.Printf("Log Group already deleted or error occurred: %v\n", err)
 	} else {
 		fmt.Printf("Log Group %s deleted successfully\n", logGroupName)
@@ -116,6 +171,10 @@ func (ms *MonitorService) Destroy(eventBus string) error{
 	return nil
 }
 
-func (ms *MonitorService) Tail(eventBus string) string{
-	return "abcd"
+func (ms *MonitorService) List () []string {
+	return []string{}
+}
+
+func (ms *MonitorService) Tail (eventBus string) []string {
+	return []string{}
 }

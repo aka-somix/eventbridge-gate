@@ -1,10 +1,10 @@
 package services
 
 type MonitorConfig struct {
-	logGroupPrefix string	
-	retentionDays string
-	policyName string
-	ruleName string
-	eventPattern string
-	targetID string
+	LogGroupPrefix string
+	RetentionDays  int32
+	PolicyName     string
+	TargetID       string
+	RuleName       string
+	EventPattern   string
 }
