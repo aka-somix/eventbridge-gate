@@ -6,15 +6,16 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"time"
+	"os/signal"
+	"strings"
+	"syscall"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs"
-	cw_types "github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs/types"
+	cwtypes "github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs/types"
 	"github.com/aws/aws-sdk-go-v2/service/eventbridge"
 	"github.com/aws/aws-sdk-go-v2/service/eventbridge/types"
-	eb_types "github.com/aws/aws-sdk-go-v2/service/eventbridge/types"
 )
 
 
@@ -42,6 +43,19 @@ func NewMonitorService() (*MonitorService, error) {
 		cwLogsClient: cloudwatchlogs.NewFromConfig(awsCfg),
 		ebClient:     eventbridge.NewFromConfig(awsCfg),
 	}, nil
+}
+
+func (ms *MonitorService) getArnFromLogGroupName(ctx context.Context, logGroupName string) (*cwtypes.LogGroup, error) {
+	// Retrieve Created Log Group
+	descOutput, descErr := ms.cwLogsClient.DescribeLogGroups(ctx, &cloudwatchlogs.DescribeLogGroupsInput{
+		LogGroupNamePrefix: aws.String(logGroupName),
+	})
+	if descErr != nil || len(descOutput.LogGroups) == 0 {
+		return nil, descErr
+	}
+	var logGroupArn = descOutput.LogGroups[0]
+
+	return &logGroupArn, nil
 }
 
 func (ms *MonitorService) Create(eventBus string) error {
@@ -94,14 +108,11 @@ func (ms *MonitorService) Create(eventBus string) error {
 		fmt.Printf("Log Resource Policy %s created successfully\n", cfg.PolicyName)
 	}
 
-	// Retrieve Created Log Group
-	descOutput, descErr := ms.cwLogsClient.DescribeLogGroups(ctx, &cloudwatchlogs.DescribeLogGroupsInput{
-		LogGroupNamePrefix: aws.String(logGroupName),
-	})
-	if descErr != nil || len(descOutput.LogGroups) == 0 {
-		return error(fmt.Errorf("Failed to Create Monitor: %w", descErr))
+	// Retrieve Log Group Object from name
+	logGroupObj, err := ms.getArnFromLogGroupName(ctx, logGroupName);
+	if err != nil {
+		return err
 	}
-	var logGroupArn = aws.ToString(descOutput.LogGroups[0].Arn)
 
 	// Create EventBridge Rule
 	_, err = ms.ebClient.PutRule(ctx, &eventbridge.PutRuleInput{
@@ -116,9 +127,9 @@ func (ms *MonitorService) Create(eventBus string) error {
 	}
 
 	// Add Target to EventBridge Rule
-	target := eb_types.Target{
+	target := types.Target{
 		Id:  aws.String(cfg.TargetID),
-		Arn: aws.String(logGroupArn),
+		Arn: aws.String(*logGroupObj.Arn),
 	}
 	_, err = ms.ebClient.PutTargets(ctx, &eventbridge.PutTargetsInput{
 		Rule:         aws.String(cfg.RuleName),
@@ -176,72 +187,64 @@ func (ms *MonitorService) Destroy(eventBus string) error {
 	return nil
 }
 
-func (ms *MonitorService) List () []string {
+func (ms *MonitorService) List() []string {
 	return []string{}
 }
 
-func (ms *MonitorService) Tail (eventBus string) error {
-
+func (ms *MonitorService) Tail(eventBus string) error {
 	logGroupName := fmt.Sprintf("%s/%s", cfg.LogGroupPrefix, eventBus)
 
-	// Create the input for describing log streams
-	describeStreamsInput := &cloudwatchlogs.DescribeLogStreamsInput{
-		LogGroupName: aws.String(logGroupName),
-		OrderBy: cw_types.OrderByLastEventTime,
-		Descending:   aws.Bool(true),
+	var logGroupObj, err = ms.getArnFromLogGroupName(context.TODO(), logGroupName)
+
+	// Create the input for starting live tail
+	startLiveTailInput := &cloudwatchlogs.StartLiveTailInput{
+		LogGroupIdentifiers: []string{*logGroupObj.LogGroupArn},
 	}
 
-	// Describe log streams to find the most recent stream
-	describeStreamsResp, err := ms.cwLogsClient.DescribeLogStreams(context.TODO(), describeStreamsInput)
+	// Start live tailing logs
+	liveTail, err := ms.cwLogsClient.StartLiveTail(context.TODO(), startLiveTailInput)
 	if err != nil {
-		return error(fmt.Errorf("unable to describe log streams, %v", err))
+		return fmt.Errorf("unable to start live tail, %v", err)
 	}
 
-	if len(describeStreamsResp.LogStreams) == 0 {
-		return fmt.Errorf("no log streams found for %s", logGroupName)
-	}
+	// Print a message that tailing is starting
+	fmt.Println("Tailing logs in real-time... Press 'q' to stop.")
 
-	// Get the most recent log stream
-	logStreamName := describeStreamsResp.LogStreams[0].LogStreamName
 
-	// Create the input for getting log events
-	getLogEventsInput := &cloudwatchlogs.GetLogEventsInput{
-		LogGroupName:  aws.String(logGroupName),
-		LogStreamName: logStreamName,
-		StartFromHead: aws.Bool(true),
-	}
+	// Create a channel to listen for interrupt signals to gracefully exit the loop
+	stopChannel := make(chan os.Signal, 1)
+	signal.Notify(stopChannel, syscall.SIGINT, syscall.SIGTERM)
 
-	// Start reading log events in a loop
-	fmt.Println("Tailing logs... Press 'q' to stop.")
-	reader := bufio.NewReader(os.Stdin)
+	streamingChannel := liveTail.GetStream().Events()
 
 	go func() {
-		for {
-			// Fetch the log events
-			logEventsResp, err := ms.cwLogsClient.GetLogEvents(context.TODO(), getLogEventsInput)
-			if err != nil {
-				fmt.Println("Error fetching log events:", err)
-				break
+		// Use a range loop to read all messages from the channel
+		for streamResult := range streamingChannel {
+			// Use a type assertion or type switch to check and cast the type
+			if sessionUpdate, ok := streamResult.(*cwtypes.StartLiveTailResponseStreamMemberSessionUpdate); ok {
+				for _, message := range sessionUpdate.Value.SessionResults {
+					fmt.Println(*message.Message)
+				}
 			}
-
-			// Display each log event
-			for _, event := range logEventsResp.Events {
-				fmt.Println(event.Message)
-			}
-
-			// Sleep before fetching the next batch of events
-			time.Sleep(2 * time.Second)
 		}
+		fmt.Println("Closing Live tailing stream.")
 	}()
 
-	// Wait for the user to press 'q' to stop tailing
+	// Wait for the user to press 'q' to quit
+	reader := bufio.NewReader(os.Stdin)
 	for {
-		fmt.Print("Press 'q' to stop tailing: ")
 		input, _ := reader.ReadString('\n')
-		if input == "q\n" {
-			fmt.Println("Stopping log tailing.")
+		if strings.TrimSpace(input) == "q" {
 			break
 		}
+	}
+
+	// Close the stream and handle cleanup
+	err = liveTail.GetStream().Close()
+	if err != nil {
+		fmt.Println("Error closing stream: ", err)
+	} else {
+		fmt.Println("Live tail stream closed.")
 	}
 
 	return nil
