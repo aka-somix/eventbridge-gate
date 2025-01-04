@@ -187,8 +187,35 @@ func (ms *MonitorService) Destroy(eventBus string) error {
 	return nil
 }
 
-func (ms *MonitorService) List() []string {
-	return []string{}
+func (ms *MonitorService) List() ([]string, error) {
+    ctx := context.TODO()
+    var matchingEventBuses []string
+
+    // List all EventBuses
+    listBusesOutput, err := ms.ebClient.ListEventBuses(ctx, &eventbridge.ListEventBusesInput{})
+    if err != nil {
+        return nil, fmt.Errorf("failed to list event buses: %w", err)
+    }
+
+    // Iterate through each EventBus and check for the RuleName
+    for _, eventBus := range listBusesOutput.EventBuses {
+        rulesOutput, err := ms.ebClient.ListRules(ctx, &eventbridge.ListRulesInput{
+            EventBusName: eventBus.Name,
+        })
+        if err != nil {
+            fmt.Printf("Error listing rules for EventBus %s: %v\n", *eventBus.Name, err)
+            continue
+        }
+
+        for _, rule := range rulesOutput.Rules {
+            if *rule.Name == cfg.RuleName {
+                matchingEventBuses = append(matchingEventBuses, *eventBus.Name)
+                break
+            }
+        }
+    }
+
+    return matchingEventBuses, nil
 }
 
 func (ms *MonitorService) Tail(eventBus string) error {

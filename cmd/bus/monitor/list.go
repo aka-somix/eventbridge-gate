@@ -13,11 +13,24 @@ var monitorListCmd = &cobra.Command{
 	Long:  `This command is used to list the AWS EventBridge event buses.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		// Retrieve list of monitors from account
-		var monitors = monitorService.List();
+		var monitors, err = monitorService.List()
+		if err != nil {
+			fmt.Printf("Error while retrieving monitors list: %s\n", err)
+			return
+		}
 
-		// TODO scirone: beautify
+		// Check if no monitors were found
+		if len(monitors) == 0 {
+			fmt.Println("No monitors found.")
+			return
+		}
 
-		// Print out monitors found
-		fmt.Printf("Monitors available: %s\n", monitors)
+		// TODO scirone: Beautify
+
+		// Print out monitors in a bullet list format
+		fmt.Println("Monitors available:")
+		for _, monitor := range monitors {
+			fmt.Printf("- %s\n", monitor)
+		}
 	},
 }
