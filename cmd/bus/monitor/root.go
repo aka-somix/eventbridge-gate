@@ -1,7 +1,7 @@
 package monitor
 
 import (
-	"github.com/aka-somix/aws-events-gate/internal/services"
+	"github.com/aka-somix/aws-events-gate/pkg/services"
 	"github.com/spf13/cobra"
 )
 

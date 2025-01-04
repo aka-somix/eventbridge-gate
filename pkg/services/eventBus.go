@@ -3,7 +3,8 @@ package services
 import (
 	"encoding/json"
 	"fmt"
-	"os/exec"
+
+	"github.com/aka-somix/aws-events-gate/internal/aws"
 )
 
 type EventBus struct {
@@ -18,9 +19,8 @@ func NewEventBusService() *EventBusService {
 }
 
 func (ebs *EventBusService) List() ([]EventBus, error) {
-
 	// Run the AWS CLI command to list event buses
-	out, err := exec.Command("aws", "events", "list-event-buses", "--output", "json").Output()
+	out, err := aws.AwsCommand("aws", "events", "list-event-buses", "--output", "json").Output()
 	if err != nil {
 		fmt.Printf("Internal Error while retrieving Event Buses: %v\n", err)
 		return nil, err
