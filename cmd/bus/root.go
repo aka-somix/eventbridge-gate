@@ -7,7 +7,7 @@ import (
 )
 
 // Global Monitor Service init
-var ebService = services.NewEventBusService()
+var ebService, _ = services.NewEventBusService()
 
 
 // busCmd represents the "bus" subcommand

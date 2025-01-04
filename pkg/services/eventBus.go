@@ -1,10 +1,12 @@
 package services
 
 import (
-	"encoding/json"
+	"context"
 	"fmt"
 
-	"github.com/aka-somix/aws-events-gate/internal/aws"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/eventbridge"
 )
 
 type EventBus struct {
@@ -12,28 +14,39 @@ type EventBus struct {
 }
 
 type EventBusService struct {
+	client *eventbridge.Client
 }
 
-func NewEventBusService() *EventBusService {
-	return &EventBusService{}
+func NewEventBusService() (*EventBusService, error) {
+	// Load the default AWS configuration
+	cfg, err := config.LoadDefaultConfig(context.TODO())
+	if err != nil {
+		return nil, fmt.Errorf("failed to load AWS configuration: %w", err)
+	}
+
+	// Create an EventBridge client
+	client := eventbridge.NewFromConfig(cfg)
+
+	return &EventBusService{
+		client: client,
+	}, nil
 }
 
 func (ebs *EventBusService) List() ([]EventBus, error) {
-	// Run the AWS CLI command to list event buses
-	out, err := aws.AwsCommand("aws", "events", "list-event-buses", "--output", "json").Output()
+	// Call the ListEventBuses API
+	input := &eventbridge.ListEventBusesInput{}
+	output, err := ebs.client.ListEventBuses(context.TODO(), input)
 	if err != nil {
-		fmt.Printf("Internal Error while retrieving Event Buses: %v\n", err)
-		return nil, err
+		return nil, fmt.Errorf("failed to list event buses: %w", err)
 	}
 
-	// Parse the JSON output
-	var result struct {
-		EventBuses []EventBus `json:"EventBuses"`
-	}
-	if err := json.Unmarshal(out, &result); err != nil {
-		fmt.Printf("Error parsing AWS CLI output: %v\n", err)
-		return nil, err
+	// Map the SDK's EventBus structure to our custom EventBus type
+	var eventBuses []EventBus
+	for _, eb := range output.EventBuses {
+		eventBuses = append(eventBuses, EventBus{
+			Name: aws.ToString(eb.Name),
+		})
 	}
 
-	return result.EventBuses, nil
+	return eventBuses, nil
 }
