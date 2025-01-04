@@ -1,15 +1,20 @@
 package services
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs"
+	cw_types "github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs/types"
 	"github.com/aws/aws-sdk-go-v2/service/eventbridge"
 	"github.com/aws/aws-sdk-go-v2/service/eventbridge/types"
+	eb_types "github.com/aws/aws-sdk-go-v2/service/eventbridge/types"
 )
 
 
@@ -111,7 +116,7 @@ func (ms *MonitorService) Create(eventBus string) error {
 	}
 
 	// Add Target to EventBridge Rule
-	target := types.Target{
+	target := eb_types.Target{
 		Id:  aws.String(cfg.TargetID),
 		Arn: aws.String(logGroupArn),
 	}
@@ -175,6 +180,69 @@ func (ms *MonitorService) List () []string {
 	return []string{}
 }
 
-func (ms *MonitorService) Tail (eventBus string) []string {
-	return []string{}
+func (ms *MonitorService) Tail (eventBus string) error {
+
+	logGroupName := fmt.Sprintf("%s/%s", cfg.LogGroupPrefix, eventBus)
+
+	// Create the input for describing log streams
+	describeStreamsInput := &cloudwatchlogs.DescribeLogStreamsInput{
+		LogGroupName: aws.String(logGroupName),
+		OrderBy: cw_types.OrderByLastEventTime,
+		Descending:   aws.Bool(true),
+	}
+
+	// Describe log streams to find the most recent stream
+	describeStreamsResp, err := ms.cwLogsClient.DescribeLogStreams(context.TODO(), describeStreamsInput)
+	if err != nil {
+		return error(fmt.Errorf("unable to describe log streams, %v", err))
+	}
+
+	if len(describeStreamsResp.LogStreams) == 0 {
+		return fmt.Errorf("no log streams found for %s", logGroupName)
+	}
+
+	// Get the most recent log stream
+	logStreamName := describeStreamsResp.LogStreams[0].LogStreamName
+
+	// Create the input for getting log events
+	getLogEventsInput := &cloudwatchlogs.GetLogEventsInput{
+		LogGroupName:  aws.String(logGroupName),
+		LogStreamName: logStreamName,
+		StartFromHead: aws.Bool(true),
+	}
+
+	// Start reading log events in a loop
+	fmt.Println("Tailing logs... Press 'q' to stop.")
+	reader := bufio.NewReader(os.Stdin)
+
+	go func() {
+		for {
+			// Fetch the log events
+			logEventsResp, err := ms.cwLogsClient.GetLogEvents(context.TODO(), getLogEventsInput)
+			if err != nil {
+				fmt.Println("Error fetching log events:", err)
+				break
+			}
+
+			// Display each log event
+			for _, event := range logEventsResp.Events {
+				fmt.Println(event.Message)
+			}
+
+			// Sleep before fetching the next batch of events
+			time.Sleep(2 * time.Second)
+		}
+	}()
+
+	// Wait for the user to press 'q' to stop tailing
+	for {
+		fmt.Print("Press 'q' to stop tailing: ")
+		input, _ := reader.ReadString('\n')
+		if input == "q\n" {
+			fmt.Println("Stopping log tailing.")
+			break
+		}
+	}
+
+	return nil
 }
