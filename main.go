@@ -1,6 +1,5 @@
 /*
-Copyright © 2025 NAME HERE <EMAIL ADDRESS>
-
+Copyright © 2025 aka-somix <s.cirone.work@gmail.com>
 */
 package main
 
