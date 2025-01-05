@@ -54,7 +54,13 @@ changelog:
 
 brews:
   - name: "egate"
+    repository:
+      owner: aka-somix
+      name: homebrew-eventbridge-gate
+      branch: main
     homepage: "https://github.com/aka-somix/eventbridge-gate"
+
+
 
 
 release:
