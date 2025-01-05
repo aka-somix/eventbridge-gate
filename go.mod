@@ -1,4 +1,4 @@
-module github.com/aka-somix/aws-events-gate
+module github.com/aka-somix/eventbridge-gate
 
 go 1.23.1
 

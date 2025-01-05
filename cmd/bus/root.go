@@ -1,8 +1,8 @@
 package bus
 
 import (
-	"github.com/aka-somix/aws-events-gate/cmd/bus/monitor"
-	"github.com/aka-somix/aws-events-gate/pkg/services"
+	"github.com/aka-somix/eventbridge-gate/cmd/bus/monitor"
+	"github.com/aka-somix/eventbridge-gate/pkg/services"
 	"github.com/spf13/cobra"
 )
 

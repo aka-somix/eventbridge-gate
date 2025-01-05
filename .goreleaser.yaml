@@ -49,7 +49,13 @@ changelog:
       - "^:pencil:"
       - "^:recycle:"
       - "^:tada:"
+      - "^:wip:"
       - "Merge pull request"
+
+brews:
+  - name: "egate"
+    homepage: "https://github.com/aka-somix/eventbridge-gate"
+
 
 release:
   footer: >-

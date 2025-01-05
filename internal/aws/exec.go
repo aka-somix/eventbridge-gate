@@ -3,7 +3,7 @@ package aws
 import (
 	"os/exec"
 
-	"github.com/aka-somix/aws-events-gate/internal/store"
+	"github.com/aka-somix/eventbridge-gate/internal/store"
 )
 
 func AwsCommand(name string, arg ...string) *exec.Cmd {

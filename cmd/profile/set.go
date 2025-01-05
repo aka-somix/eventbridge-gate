@@ -6,7 +6,7 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/aka-somix/aws-events-gate/internal/store"
+	"github.com/aka-somix/eventbridge-gate/internal/store"
 	"github.com/manifoldco/promptui"
 	"github.com/spf13/cobra"
 )

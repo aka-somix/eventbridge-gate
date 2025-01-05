@@ -20,11 +20,11 @@ import (
 
 
 var cfg = &MonitorConfig{
-	LogGroupPrefix: "/aws-events-gate/watch",
+	LogGroupPrefix: "/eventbridge-gate/watch",
 	RetentionDays:  1,
 	PolicyName:     "allow-logging-from-eventbridge",
-	TargetID:       "aws-events-gate-log-group",
-	RuleName:       "aws-events-gate-rule",
+	TargetID:       "eventbridge-gate-log-group",
+	RuleName:       "eventbridge-gate-rule",
 	EventPattern:   `{"source": [ { "wildcard": "*" }]}`,
 }
 

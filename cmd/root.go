@@ -6,8 +6,8 @@ package cmd
 import (
 	"os"
 
-	"github.com/aka-somix/aws-events-gate/cmd/bus"
-	"github.com/aka-somix/aws-events-gate/cmd/profile"
+	"github.com/aka-somix/eventbridge-gate/cmd/bus"
+	"github.com/aka-somix/eventbridge-gate/cmd/profile"
 	"github.com/spf13/cobra"
 )
 
